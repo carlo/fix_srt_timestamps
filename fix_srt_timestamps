@@ -1,0 +1,86 @@
+#!/usr/bin/env ruby
+# coding: UTF-8
+
+require "rubygems"
+require "bundler/setup"
+require "trollop"
+require "tmpdir"
+
+
+def get_options_or_die
+  opts = Trollop::options do
+    opt :srt, "filename SRT", :type => :string
+    opt :offset, "offset timestamps by N seconds", :type => :int
+    opt :fps24, "recalculate timestamps of 25-FPS subs for 24-FPS videos", :type => :boolean
+  end
+
+  Trollop::die "--srt is mandatory" unless opts[:srt]
+  Trollop::die "--offset is mandatory" unless opts[:offset]
+  opts[:srt] = File.expand_path(opts[:srt])
+  opts
+end
+
+
+# Parameters:
+#
+# - timestamp: string, "%H:%M:%S,%L"
+# - offset_in_seconds: int
+# - fps24: bool
+def get_new_timestamp(timestamp, offset_in_seconds, fps24)
+  # Split the timestamp string.
+  (m, hours, minutes, seconds, mseconds) = timestamp.match(/(\d+):(\d+):(\d+),(\d+)/).to_a
+
+  # Turn the segments into integers.
+  hours = hours.to_i
+  minutes = minutes.to_i
+  seconds = seconds.to_i
+  mseconds = mseconds.to_i
+
+  # Calculate the timestamp in ms.
+  remainder_in_seconds = hours * 3600000 +
+    minutes * 60000 +
+    (seconds + offset_in_seconds) * 1000 +
+    mseconds
+
+  # Recalculate the FPS difference if necessary.
+  remainder_in_seconds = (remainder_in_seconds / 24 * 25).floor if fps24
+
+  hours_new = (remainder_in_seconds / 3600000).floor
+
+  remainder_in_seconds -= hours_new * 3600000
+  minutes_new = (remainder_in_seconds / 60000).floor
+
+  remainder_in_seconds -= minutes_new * 60000
+  seconds_new = (remainder_in_seconds / 1000).floor
+
+  # Return the new timestamp string.
+  sprintf("%#.2d:%#.2d:%#.2d,%#.3d", hours_new, minutes_new, seconds_new, mseconds)
+end
+
+
+opts = get_options_or_die()
+new_srt_lines = []
+
+
+# Go through the SRT file, line by line.
+File.open(opts[:srt]).readlines.each do |l|
+  # Clean the line.
+  l.strip!
+
+  # Is this a line containing timestamps?
+  if l.match(/-->/)
+    l_time = l.split(/\s+/)
+
+    start_time = get_new_timestamp(l_time[0], opts[:offset], opts[:fps24])
+    end_time = get_new_timestamp(l_time[2], opts[:offset], opts[:fps24])
+
+    # Rebuild the line
+    l = [start_time, l_time[1], end_time].join(" ")
+  end
+
+  # Collect the line.
+  new_srt_lines.push(l)
+end
+
+# Output everything.
+puts new_srt_lines.join("\n")

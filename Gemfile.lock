@@ -1,0 +1,12 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    curses (1.0.1)
+    trollop (2.1.0)
+      curses
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  trollop (~> 2.1.0)
